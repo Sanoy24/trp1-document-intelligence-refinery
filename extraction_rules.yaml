@@ -1,0 +1,221 @@
+# extraction_rules.yaml
+# The Chunking Constitution & Extraction Thresholds
+# =================================================
+# This file is the SINGLE SOURCE OF TRUTH for all tunable parameters.
+# The rubric requires: "A new document type can be onboarded by modifying
+# only extraction_rules.yaml, not code."
+#
+# Update the threshold values after Phase 0 empirical analysis.
+# DO NOT hardcode any of these values in Python.
+
+# ─────────────────────────────────────────────────────────────
+# CONFIDENCE THRESHOLDS (Strategy escalation gates)
+# ─────────────────────────────────────────────────────────────
+confidence:
+    # Strategy A (pdfplumber) confidence gate
+    # Below this → retry page with Strategy B
+    strategy_a_min: 0.70
+
+    # Strategy B (Docling) confidence gate
+    # Below this → retry page with Strategy C (VLM)
+    strategy_b_min: 0.45
+
+    # Document-level: if more than this fraction of pages are low-confidence,
+    # classify entire document as needing Vision
+    doc_level_low_confidence_pct: 0.30
+
+# ─────────────────────────────────────────────────────────────
+# PAGE-LEVEL SIGNAL THRESHOLDS
+# ─────────────────────────────────────────────────────────────
+page_signals:
+    # Minimum characters on a page to consider it "has text layer"
+    min_char_count: 50
+
+    # Minimum char density (chars / page_area_pts²) for fast text extraction
+    # Below this → likely scanned or image-dominated
+    min_char_density: 0.010
+
+    # Maximum image area ratio for Strategy A
+    # Above this → image-dominated, likely needs layout model or vision
+    max_image_area_ratio: 0.50
+
+    # Minimum distinct fonts to confirm digital PDF (not ghost text)
+    min_font_count: 1
+
+    # Minimum word count for meaningful text extraction
+    min_word_count: 30
+
+# ─────────────────────────────────────────────────────────────
+# DOCUMENT-LEVEL CLASSIFICATION THRESHOLDS
+# ─────────────────────────────────────────────────────────────
+document_classification:
+    # Fraction of pages with no text → classify as scanned_image
+    scanned_threshold_no_text_pct: 0.80
+
+    # Fraction of pages with no text → classify as mixed (has both digital + scanned)
+    mixed_threshold_no_text_pct: 0.15
+
+    # Average tables per page → classify as table_heavy
+    table_heavy_tables_per_page: 0.30
+
+    # Average image area ratio → classify as figure_heavy
+    figure_heavy_avg_image_ratio: 0.30
+
+# ─────────────────────────────────────────────────────────────
+# CHUNKING CONSTITUTION
+# These are the 5 enforced rules from the spec.
+# ChunkValidator checks every rule before emitting a chunk.
+# ─────────────────────────────────────────────────────────────
+chunking:
+    # Maximum tokens per LDU (Logical Document Unit)
+    # Chunks exceeding this are split at natural boundaries
+    max_tokens: 512
+
+    # Minimum tokens for a standalone chunk (avoid tiny orphan chunks)
+    min_tokens: 20
+
+    # Rules (all must be True — ChunkValidator enforces these)
+    rules:
+        # Rule 1: A table cell is NEVER split from its header row
+        table_cell_requires_header: true
+
+        # Rule 2: A figure caption is ALWAYS metadata of its parent figure chunk
+        figure_caption_as_metadata: true
+
+        # Rule 3: A numbered list is kept as single LDU unless it exceeds max_tokens
+        preserve_numbered_lists: true
+
+        # Rule 4: Section headers are stored as parent_section metadata on all children
+        section_header_as_parent_metadata: true
+
+        # Rule 5: Cross-references are resolved and stored as chunk relationships
+        resolve_cross_references: true
+
+    # Overlap between adjacent text chunks (in tokens) for RAG context continuity
+    chunk_overlap_tokens: 50
+
+    # Token counting model (used by tiktoken)
+    token_model: "cl100k_base"
+
+# ─────────────────────────────────────────────────────────────
+# COST BUDGET GUARD
+# ─────────────────────────────────────────────────────────────
+budget:
+    # Maximum USD spend per document for Strategy C (Vision)
+    max_cost_per_document_usd: 0.50
+
+    # Approximate cost per page for Vision strategy (Gemini Flash via OpenRouter)
+    # Update this based on your actual OpenRouter pricing
+    cost_per_page_vision_usd: 0.001
+
+    # Log a warning when a document reaches this fraction of the budget cap
+    warning_threshold_pct: 0.80
+
+# ─────────────────────────────────────────────────────────────
+# DOMAIN HINT KEYWORDS
+# Used by the keyword-based domain classifier in TriageAgent
+# ─────────────────────────────────────────────────────────────
+domain_hints:
+    financial:
+        keywords:
+            - revenue
+            - profit
+            - balance sheet
+            - income statement
+            - cash flow
+            - fiscal year
+            - audit
+            - financial statements
+            - assets
+            - liabilities
+            - equity
+            - interest income
+            - loan
+            - deposit
+
+    legal:
+        keywords:
+            - whereas
+            - hereinafter
+            - pursuant to
+            - notwithstanding
+            - indemnification
+            - jurisdiction
+            - arbitration
+            - plaintiff
+            - defendant
+            - contract
+
+    technical:
+        keywords:
+            - architecture
+            - algorithm
+            - implementation
+            - methodology
+            - system design
+            - technical specification
+            - API
+            - database
+            - infrastructure
+
+    medical:
+        keywords:
+            - diagnosis
+            - treatment
+            - clinical
+            - patient
+            - dosage
+            - adverse effects
+            - therapeutic
+            - pharmacological
+
+    general:
+        keywords: [] # fallback — matches anything
+
+# ─────────────────────────────────────────────────────────────
+# PAGEINDEX CONFIGURATION
+# ─────────────────────────────────────────────────────────────
+pageindex:
+    # Model used for section summary generation (fast + cheap)
+    summary_model: "google/gemini-flash-1.5"
+
+    # Max tokens for each section summary
+    summary_max_tokens: 150
+
+    # Minimum section length (chars) to generate a summary for
+    min_section_chars: 200
+
+    # How many top-level sections to include in PageIndex root
+    max_root_sections: 50
+
+    # Max depth of the section hierarchy tree
+    max_tree_depth: 5
+
+# ─────────────────────────────────────────────────────────────
+# VECTOR STORE CONFIGURATION
+# ─────────────────────────────────────────────────────────────
+vector_store:
+    # ChromaDB local persistence directory
+    persist_dir: "./.refinery/chromadb"
+
+    # Embedding model (via sentence-transformers or OpenAI)
+    embedding_model: "all-MiniLM-L6-v2" # local, free
+
+    # Number of results to return from semantic search
+    top_k: 10
+
+# ─────────────────────────────────────────────────────────────
+# LOGGING & LEDGER
+# ─────────────────────────────────────────────────────────────
+logging:
+    # Provenance ledger path
+    extraction_ledger_path: ".refinery/extraction_ledger.jsonl"
+
+    # DocumentProfile output directory
+    profiles_dir: ".refinery/profiles"
+
+    # PageIndex output directory
+    pageindex_dir: ".refinery/pageindex"
+
+    # Log level
+    level: "INFO"
