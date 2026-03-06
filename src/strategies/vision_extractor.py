@@ -27,6 +27,8 @@ from src.models.schemas import (
     TextBlock,
 )
 from src.strategies.base import ExtractionStrategy
+from src.utils.llm import get_chat_model
+from langchain_core.messages import HumanMessage
 
 logger = logging.getLogger(__name__)
 
@@ -61,8 +63,10 @@ class VisionExtractor(ExtractionStrategy):
         budget_cfg = get_budget_config()
         self.max_cost_per_doc = budget_cfg.get("max_usd_per_document", 0.50)
         self.max_cost_per_page = budget_cfg.get("max_usd_per_page", 0.05)
-        self.model = model or budget_cfg.get("default_model", "google/gemini-flash-1.5")
-        self.api_key = api_key or os.environ.get("OPENROUTER_API_KEY") or os.environ.get("GEMINI_API_KEY", "")
+        
+        # Load dynamic VLM via LangChain
+        self.vlm = get_chat_model(temperature=0.1, is_vlm=True)
+        self.model = getattr(self.vlm, "model_name", getattr(self.vlm, "model", "unknown"))
         self._total_cost = 0.0
 
     @property
@@ -80,12 +84,6 @@ class VisionExtractor(ExtractionStrategy):
         self._total_cost = 0.0
 
         logger.info(f"[Strategy C] Vision extraction ({self.model}): {pdf_path.name}")
-
-        if not self.api_key:
-            logger.error(
-                "No API key found. Set OPENROUTER_API_KEY or GEMINI_API_KEY env var."
-            )
-            raise ValueError("VLM API key not configured")
 
         # Convert PDF pages to images
         page_images, page_dims = self._pdf_to_images(pdf_path)
@@ -166,59 +164,50 @@ class VisionExtractor(ExtractionStrategy):
         self, image_bytes: bytes, page_num: int, profile: DocumentProfile,
         page_width: float = 612.0, page_height: float = 792.0,
     ) -> ExtractedPage:
-        """Send a page image to the VLM and parse the response."""
-        import httpx
-
+        """Send a page image to the dynamic VLM and parse the response."""
         image_b64 = base64.b64encode(image_bytes).decode("utf-8")
-
         prompt = self._build_extraction_prompt(profile)
 
-        # Call OpenRouter API
-        response = httpx.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": self.model,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/png;base64,{image_b64}",
-                                },
-                            },
-                        ],
-                    }
-                ],
-                "max_tokens": 4096,
-                "temperature": 0.1,
-            },
-            timeout=60.0,
+        # Build LangChain multimodal message
+        message = HumanMessage(
+            content=[
+                {"type": "text", "text": prompt},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{image_b64}"},
+                },
+            ]
         )
 
-        response.raise_for_status()
-        result = response.json()
+        try:
+            # Force JSON format if supported by provider
+            provider = os.environ.get("VLM_PROVIDER", "ollama").lower()
+            kwargs = {}
+            if provider == "openai":
+                kwargs["response_format"] = {"type": "json_object"}
+            elif provider == "ollama":
+                kwargs["format"] = "json"
 
-        # Track cost
-        usage = result.get("usage", {})
-        input_tokens = usage.get("prompt_tokens", 0)
-        output_tokens = usage.get("completion_tokens", 0)
-        cost_key = self.model if self.model in _COST_PER_1K_INPUT else "default"
-        page_cost = (
-            input_tokens / 1000 * _COST_PER_1K_INPUT[cost_key]
-            + output_tokens / 1000 * _COST_PER_1K_OUTPUT[cost_key]
-        )
-        self._total_cost += page_cost
+            response = self.vlm.invoke([message], **kwargs)
+            vlm_content = response.content
 
-        # Parse VLM response
-        vlm_content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
-        return self._parse_vlm_response(vlm_content, page_num, page_width, page_height)
+            # Attempt to track cost from metadata
+            usage = response.response_metadata.get("token_usage", {})
+            input_tokens = usage.get("prompt_tokens", 0)
+            output_tokens = usage.get("completion_tokens", 0)
+            
+            cost_key = self.model if self.model in _COST_PER_1K_INPUT else "default"
+            page_cost = (
+                input_tokens / 1000 * _COST_PER_1K_INPUT[cost_key]
+                + output_tokens / 1000 * _COST_PER_1K_OUTPUT[cost_key]
+            )
+            self._total_cost += page_cost
+
+            return self._parse_vlm_response(vlm_content, page_num, page_width, page_height)
+            
+        except Exception as e:
+            logger.error(f"VLM API Error: {e}")
+            raise
 
     def _build_extraction_prompt(self, profile: DocumentProfile) -> str:
         """Build a structured extraction prompt for the VLM."""
