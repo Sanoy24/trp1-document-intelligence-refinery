@@ -11,6 +11,11 @@ import logging
 import time
 from pathlib import Path
 
+from docling.datamodel.accelerator_options import AcceleratorOptions
+from docling.datamodel.base_models import InputFormat
+from docling.datamodel.pipeline_options import ThreadedPdfPipelineOptions
+from docling.document_converter import DocumentConverter, PdfFormatOption
+
 from src.models.schemas import (
     BoundingBox,
     BlockType,
@@ -52,8 +57,32 @@ class LayoutExtractor(ExtractionStrategy):
 
         try:
             from docling.document_converter import DocumentConverter
+            import os
 
-            converter = DocumentConverter()
+            # Determine a safe number of threads to use (leave 1 core free)
+            num_threads = max(1, (os.cpu_count() or 4) - 1)
+
+            # Define pipeline options — Optimized for speed and low memory
+            pipeline_options = ThreadedPdfPipelineOptions(
+                do_ocr=False,
+                generate_page_images=False,
+                do_table_structure=True,  # Always enable for Strategy B
+                ocr_batch_size=1,
+                layout_batch_size=4,
+                table_batch_size=4,
+                queue_max_size=10,
+                accelerator_options=AcceleratorOptions(
+                    num_threads=num_threads, device="cpu"
+                ),
+            )
+
+            # Initialize the converter
+            converter = DocumentConverter(
+                format_options={
+                    InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
+                }
+            )
+
             result = converter.convert(str(pdf_path))
             docling_doc = result.document
 
@@ -249,7 +278,10 @@ class LayoutExtractor(ExtractionStrategy):
 
                 caption_text = None
                 if hasattr(table_item, "caption_text"):
-                    caption_text = table_item.caption_text(docling_doc=None)
+                    try:
+                        caption_text = table_item.caption_text()
+                    except TypeError:
+                        caption_text = getattr(table_item, "text", None)
 
                 return ExtractedTable(
                     table_id=f"p{page_num}_t{idx}",
@@ -282,7 +314,10 @@ class LayoutExtractor(ExtractionStrategy):
         try:
             caption = None
             if hasattr(fig_item, "caption_text"):
-                caption = fig_item.caption_text(docling_doc=None)
+                try:
+                    caption = fig_item.caption_text()
+                except TypeError:
+                    caption = getattr(fig_item, "text", None)
             elif hasattr(fig_item, "text"):
                 caption = fig_item.text
 
