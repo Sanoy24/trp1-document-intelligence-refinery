@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -22,6 +23,9 @@ from rich.table import Table
 
 from src.agents.triage import TriageAgent
 from src.agents.extractor import ExtractionRouter
+from src.agents.chunker import ChunkingEngine
+from src.data.vector_store import VectorStore
+from src.agents.indexer import PageIndexBuilder
 
 console = Console()
 logger = logging.getLogger("refinery")
@@ -40,6 +44,9 @@ def process_document(
     pdf_path: Path,
     triage_agent: TriageAgent,
     router: ExtractionRouter,
+    chunker: ChunkingEngine,
+    vector_store: VectorStore,
+    indexer: PageIndexBuilder,
     skip_extraction: bool = False,
 ) -> None:
     """Run the full pipeline on a single document."""
@@ -93,6 +100,17 @@ def process_document(
         result_table.add_row("Processing Time", f"{result.processing_time_s:.1f}s")
 
         console.print(result_table)
+        
+        # ── Stage 3: Semantic Chunking & Vector Store ──
+        console.print("\n[bold yellow]Stage 3: Semantic Chunking Engine[/]")
+        ldus = chunker.process_document(result)
+        vector_store.ingest_ldus(ldus)
+        console.print(f"[green]✔ Ingested {len(ldus)} chunks into ChromaDB[/]")
+        
+        # ── Stage 4: PageIndex Builder & FactTable ──
+        console.print("\n[bold yellow]Stage 4: PageIndex Builder[/]")
+        page_index = indexer.build_index(profile, ldus)
+        console.print(f"[green]✔ Built PageIndex tree with {len(page_index.child_sections)} sections[/]")
 
     except Exception as e:
         console.print(f"[bold red]Extraction failed:[/] {e}")
@@ -101,6 +119,9 @@ def process_document(
 
 def main() -> None:
     """CLI entrypoint."""
+    from dotenv import load_dotenv
+    load_dotenv()
+
     parser = argparse.ArgumentParser(
         description="Document Intelligence Refinery — Process PDFs through the refinery pipeline",
     )
@@ -130,7 +151,6 @@ def main() -> None:
 
     # Set config path if specified
     if args.config:
-        import os
         os.environ["REFINERY_CONFIG_PATH"] = args.config
 
     setup_logging(args.log_level)
@@ -154,6 +174,9 @@ def main() -> None:
     # Initialize agents
     triage_agent = TriageAgent()
     router = ExtractionRouter()
+    chunker = ChunkingEngine()
+    vector_store = VectorStore()
+    indexer = PageIndexBuilder()
 
     console.print(Panel(
         "[bold]Document Intelligence Refinery[/]\n"
@@ -171,6 +194,9 @@ def main() -> None:
                 pdf_path,
                 triage_agent,
                 router,
+                chunker,
+                vector_store,
+                indexer,
                 skip_extraction=args.triage_only,
             )
         except Exception as e:
@@ -182,6 +208,9 @@ def main() -> None:
     if not args.triage_only:
         console.print(f"[dim]Ledger saved to: .refinery/extraction_ledger.jsonl[/]")
 
+    # Force immediate process exit to kill lingering ONNX/Chroma daemon threads
+    # that cause hanging file locks on Windows
+    os._exit(0)
 
 if __name__ == "__main__":
     main()
