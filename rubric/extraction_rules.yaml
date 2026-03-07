@@ -33,7 +33,11 @@ page_signals:
 
     # Minimum char density (chars / page_area_pts²) for fast text extraction
     # Below this → likely scanned or image-dominated
-    min_char_density: 0.010
+    # Calibrated from Phase 0 corpus analysis:
+    #   - Digital docs avg ≈ 0.003–0.004
+    #   - Scanned docs ≈ 0.000002
+    # See DOMAIN_NOTES.md §6.
+    min_char_density: 0.002
 
     # Maximum image area ratio for Strategy A
     # Above this → image-dominated, likely needs layout model or vision
@@ -60,6 +64,26 @@ document_classification:
 
     # Average image area ratio → classify as figure_heavy
     figure_heavy_avg_image_ratio: 0.30
+
+    # For table-heavy documents, only route to the layout-aware Strategy B
+    # when the average image area ratio is at least this value.
+    # Rationale:
+    #   - Documents like the Ethiopia Tax Expenditure report are table-heavy
+    #     but have virtually no images (avg_image_area_ratio ≈ 0.0007),
+    #     and Strategy A (Fast Text) is sufficient and more robust.
+    #   - Complex financial reports with charts/figures (e.g. CBE Annual Report)
+    #     have higher image ratios and benefit from Docling.
+    layout_for_table_heavy_min_image_ratio: 0.05
+
+    # Maximum document length (in pages) where Strategy B (Docling) is allowed.
+    # Very long documents can be expensive and memory-heavy for layout models;
+    # they will instead use Strategy A + page-level escalation to Strategy C.
+    max_pages_for_layout: 120
+
+    # If a digital document has an extremely high average image area ratio,
+    # it behaves more like a scanned/image-heavy report. In those cases,
+    # prefer Vision (Strategy C) over Docling to avoid OOMs.
+    layout_max_avg_image_ratio: 0.85
 
 # ─────────────────────────────────────────────────────────────
 # CHUNKING CONSTITUTION
