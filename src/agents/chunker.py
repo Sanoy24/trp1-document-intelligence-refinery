@@ -202,9 +202,13 @@ class ChunkingEngine:
         """
         Lightweight heuristic to decide if a line of text is likely a section heading.
         This improves PageIndex quality for extractors that do not label headings.
+        Rejects numeric table rows and single-letter fragments to avoid spurious sections.
 
         Heuristics:
           - Short lines (<= 80 chars)
+          - Must contain at least some letters (reject pure numeric rows)
+          - Not a single character (reject column headers like "T", "E")
+          - Not a row of numeric tokens (e.g. "68.7  76.4  120.7")
           - Either:
               * Start with a numbering pattern (e.g., "1.", "2.1", "I.", "A.")
               * OR are mostly uppercase words (titles)
@@ -217,12 +221,27 @@ class ChunkingEngine:
         if len(stripped) > 80:
             return False
 
-        # Numbered heading patterns
+        # Reject lines with no letters (numeric table rows like "0.09  0.01  0.00  0.11")
+        letters = [ch for ch in stripped if ch.isalpha()]
+        if not letters:
+            return False
+
+        # Reject single-character "headings" (often table column headers like "T", "E")
+        if len(stripped) <= 1:
+            return False
+
+        # Reject lines that look like table data rows: multiple tokens that are all numeric
+        tokens = stripped.split()
+        if len(tokens) >= 2:
+            numeric_tokens = sum(1 for t in tokens if re.match(r"^[\d.,\-]+$", t))
+            if numeric_tokens == len(tokens):
+                return False
+
+        # Numbered heading patterns (e.g. "3.1  Defining...", "A.  Negative...")
         if re.match(r"^(\d+(\.\d+)*|[IVXLCM]+\.|[A-Z]\.)\s", stripped):
             return True
 
         # All-caps / title-like headings (allow digits and punctuation)
-        letters = [ch for ch in stripped if ch.isalpha()]
         if letters:
             upper_ratio = sum(1 for ch in letters if ch.isupper()) / len(letters)
             if upper_ratio > 0.8:
