@@ -1,0 +1,75 @@
+{
+  "title": "CBE ANNUAL REPORT 2023-24.pdf",
+  "page_start": 1,
+  "page_end": 161,
+  "child_sections": [
+    {
+      "title": "CBE NOOR",
+      "page_start": 16,
+      "page_end": 74,
+      "child_sections": [],
+      "key_entities": [],
+      "summary": "The Sharia Advisory Committee confirms CBE Noor's fiscal year 2024 transactions and profit distributions fully comply with Sharia Rules and Principles. The bank mobilized 116.56 billion Birr in deposits and earned 1.972 billion Birr in profit. The Committee remains dedicated to ensuring ongoing Sharia compliance and expanding financial access.",
+      "data_types_present": [
+        "tables",
+        "figures"
+      ]
+    },
+    {
+      "title": "ETB",
+      "page_start": 74,
+      "page_end": 161,
+      "child_sections": [],
+      "key_entities": [],
+      "summary": "The provided tables show a significant year-over-year increase in total outstanding loans across various sectors and jurisdictions. The text defines financial commitments and outlines the Group's strategy for managing liquidity risk to ensure obligations are met. Oversight committees regularly monitor asset and liability structures to maintain sufficient liquidity under normal and stressed conditions.",
+      "data_types_present": [
+        "tables",
+        "figures"
+      ]
+    },
+    {
+      "title": "1 year months",
+      "page_start": 121,
+      "page_end": 121,
+      "child_sections": [],
+      "key_entities": [],
+      "summary": "The provided text specifies a maximum duration of up to one month. It contains a typographical error but clearly indicates a short-term timeframe. This fragment likely serves as a deadline or validity period.",
+      "data_types_present": []
+    },
+    {
+      "title": "30 June 2024",
+      "page_start": 121,
+      "page_end": 121,
+      "child_sections": [],
+      "key_entities": [],
+      "summary": "No text available to summarize.",
+      "data_types_present": []
+    },
+    {
+      "title": "I. Assets",
+      "page_start": 121,
+      "page_end": 121,
+      "child_sections": [],
+      "key_entities": [],
+      "summary": "No text available to summarize.",
+      "data_types_present": []
+    },
+    {
+      "title": "A. Interest Rate Sensitive Assets",
+      "page_start": 121,
+      "page_end": 137,
+      "child_sections": [],
+      "key_entities": [],
+      "summary": "This section details rate-sensitive assets and liabilities across maturity buckets. It calculates interest rate gaps to determine cumulative financial exposure. The text also defines exchange rate risk as value fluctuations caused by foreign currency changes.",
+      "data_types_present": [
+        "tables",
+        "figures"
+      ]
+    }
+  ],
+  "key_entities": [],
+  "summary": "Automated PageIndex for CBE ANNUAL REPORT 2023-24.pdf",
+  "data_types_present": [
+    "text"
+  ]
+}
