@@ -96,7 +96,15 @@ class ChunkingEngine:
             sorted_blocks = sorted(page.text_blocks, key=lambda b: (b.reading_order, b.bbox.y0 if b.bbox else 0))
 
             for block in sorted_blocks:
-                
+
+                # Heuristic heading detection for sources that don't label headings explicitly.
+                # If a paragraph "looks like" a section title, treat it as a heading so that
+                # PageIndex can build a useful navigation tree.
+                if block.block_type == BlockType.PARAGRAPH and self._looks_like_heading(
+                    block.content
+                ):
+                    block.block_type = BlockType.HEADING
+
                 # Rule 4: Tracking Section Headers
                 if block.block_type == BlockType.HEADING:
                     flush_list()
@@ -189,6 +197,38 @@ class ChunkingEngine:
         
         logger.info(f"Generated {len(ldus)} LDUs for {document.filename}")
         return ldus
+
+    def _looks_like_heading(self, text: str) -> bool:
+        """
+        Lightweight heuristic to decide if a line of text is likely a section heading.
+        This improves PageIndex quality for extractors that do not label headings.
+
+        Heuristics:
+          - Short lines (<= 80 chars)
+          - Either:
+              * Start with a numbering pattern (e.g., "1.", "2.1", "I.", "A.")
+              * OR are mostly uppercase words (titles)
+        """
+        stripped = text.strip()
+        if not stripped:
+            return False
+
+        # Ignore very long lines — unlikely to be headings
+        if len(stripped) > 80:
+            return False
+
+        # Numbered heading patterns
+        if re.match(r"^(\d+(\.\d+)*|[IVXLCM]+\.|[A-Z]\.)\s", stripped):
+            return True
+
+        # All-caps / title-like headings (allow digits and punctuation)
+        letters = [ch for ch in stripped if ch.isalpha()]
+        if letters:
+            upper_ratio = sum(1 for ch in letters if ch.isupper()) / len(letters)
+            if upper_ratio > 0.8:
+                return True
+
+        return False
 
     def _estimate_tokens(self, text: str) -> int:
         """Rough token estimation (fast)."""
