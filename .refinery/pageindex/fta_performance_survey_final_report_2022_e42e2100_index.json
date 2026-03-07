@@ -1,0 +1,90 @@
+{
+  "title": "fta_performance_survey_final_report_2022.pdf",
+  "page_start": 1,
+  "page_end": 155,
+  "child_sections": [
+    {
+      "title": "RFP No: ET-NCB-MOFEC-COPCU-129904-CS-QCBS",
+      "page_start": 1,
+      "page_end": 17,
+      "child_sections": [],
+      "key_entities": [],
+      "summary": "This document outlines the structure and introductory chapters of an assessment report on Ethiopia's FTA Program by the Ministry of Finance and TAK-IRDI. It details the study's background, objectives, and scope while defining the methodology for data collection. The text serves as a roadmap for evaluating the FTA initiative's implementation status.",
+      "data_types_present": [
+        "figures",
+        "tables"
+      ]
+    },
+    {
+      "title": "1 Constitution of The Federal Democratic Republic of Ethiopia, 2014",
+      "page_start": 17,
+      "page_end": 23,
+      "child_sections": [],
+      "key_entities": [],
+      "summary": "The Constitution establishes a legal framework for transparency and accountability, guiding Public Financial Management Reforms. Since 2006, the Protection of Basic Services (PBS) program has expanded access to essential services through decentralized delivery. Successive phases have further institutionalized citizen engagement and feedback mechanisms within the service delivery system.",
+      "data_types_present": []
+    },
+    {
+      "title": "3 http://197.156.84.34/programmes-projects/fta/. Accessed on 9 th Feb 2022",
+      "page_start": 23,
+      "page_end": 36,
+      "child_sections": [],
+      "key_entities": [],
+      "summary": "The FTA initiative links transparency inputs to improved public service delivery and quality of life through a logical framework. Assessments since 2006 revealed gaps in citizen knowledge, necessitating ongoing monitoring and benchmarking. Regular course correction ensures accountability and successful implementation across all government levels.",
+      "data_types_present": [
+        "figures",
+        "tables"
+      ]
+    },
+    {
+      "title": "6 CSA (2020) Ethiopia Socioeconomic Survey (ESS)2018/19. Addis Ababa, Ethiopia",
+      "page_start": 36,
+      "page_end": 43,
+      "child_sections": [],
+      "key_entities": [],
+      "summary": "Most local governments provide timely budgetary information, though audit findings remain the least accessible type. Textual formats dominate dissemination, suggesting a need for mixed media to improve public understanding across education levels. While most woredas meet disclosure deadlines, regional performance and information provision vary.",
+      "data_types_present": [
+        "figures"
+      ]
+    },
+    {
+      "title": "8 Current year refers to the budget year the pre-discussions are conducted.",
+      "page_start": 43,
+      "page_end": 44,
+      "child_sections": [],
+      "key_entities": [],
+      "summary": "Establishing robust accountability mechanisms through performance measurement and transparent reporting is essential for local government efficiency and trust. Assessments reveal significant gaps, as many localities fail to evaluate services or enforce corrective actions. Consequently, stricter enforcement of guidelines is required to ensure officials are held accountable.",
+      "data_types_present": [
+        "figures"
+      ]
+    },
+    {
+      "title": "11 \u12e8\u134b\u12ed\u1293\u1295\u1235 \u1283\u120b\u134a\u1290\u1275\u1295 \u1260\u12a0\u130d\u1263\u1261 \u1263\u1208\u1218\u12c8\u1323\u1275 \u12e8\u121a\u12c8\u1230\u12f1 \u12a0\u1235\u1270\u12f3\u12f0\u122b\u12ca \u12a5\u122d\u121d\u1303\u12ce\u127d \u1218\u1218\u122a\u12eb \u1241\u1325\u122d 49/2009",
+      "page_start": 44,
+      "page_end": 103,
+      "child_sections": [],
+      "key_entities": [],
+      "summary": "FTA implementation is hindered by external shocks like the pandemic and internal issues such as low awareness and staff turnover. Although most federal institutions are aware of the initiative, inconsistent staffing structures reveal a lack of clear operational guidance. Standardizing personnel allocation is crucial for sustainable financial transparency.",
+      "data_types_present": [
+        "figures",
+        "tables"
+      ]
+    },
+    {
+      "title": "41 This applies to any government employee",
+      "page_start": 103,
+      "page_end": 155,
+      "child_sections": [],
+      "key_entities": [],
+      "summary": "An assessment of Ethiopia's FTA initiative shows that while legal frameworks exist, implementation commitment remains critically weak. Despite some budget transparency progress, limited accountability and participation have caused a significant decline in citizen satisfaction with service delivery.",
+      "data_types_present": [
+        "tables"
+      ]
+    }
+  ],
+  "key_entities": [],
+  "summary": "Automated PageIndex for fta_performance_survey_final_report_2022.pdf",
+  "data_types_present": [
+    "text"
+  ]
+}
