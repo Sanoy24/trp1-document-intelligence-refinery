@@ -15,7 +15,11 @@ import logging
 import time
 from pathlib import Path
 
-from src.config import get_confidence_thresholds, get_logging_config
+from src.config import (
+    get_confidence_thresholds,
+    get_document_classification_thresholds,
+    get_logging_config,
+)
 from src.models.schemas import (
     DocumentProfile,
     OriginType,
@@ -48,6 +52,7 @@ class ExtractionRouter:
             "vision": VisionExtractor(),
         }
         self.confidence_gates = get_confidence_thresholds()
+        self.doc_thresholds = get_document_classification_thresholds()
 
     def extract(
         self, pdf_path: Path, profile: DocumentProfile
@@ -130,7 +135,8 @@ class ExtractionRouter:
         """
         Pick the initial strategy based on the DocumentProfile decision tree:
         1. Scanned Image -> Strategy C (Vision)
-        2. Mixed Origin OR Table Heavy OR Multi-Column -> Strategy B (Layout)
+        2. Mixed Origin OR (Table Heavy / Multi-Column) -> Strategy B (Layout),
+           except for "simple" table-heavy documents where Fast Text is sufficient.
         3. Low Confidence (< 0.70) -> Strategy B (Layout)
         4. Single Column Native Digital -> Strategy A (Fast Text)
         """
@@ -138,12 +144,45 @@ class ExtractionRouter:
         if profile.origin_type == OriginType.SCANNED_IMAGE:
             return "vision"
 
-        # 2. Layout Complexity escalation (Table Heavy / Multi Column / Mixed)
-        if (profile.origin_type == OriginType.MIXED or 
-            profile.layout_complexity in (LayoutComplexity.TABLE_HEAVY, 
-                                        LayoutComplexity.MULTI_COLUMN, 
-                                        LayoutComplexity.MIXED)):
+        # Compute document-level average image ratio to distinguish
+        # "complex" vs "simple" table-heavy layouts.
+        avg_img_ratio = 0.0
+        if profile.per_page_signals:
+            avg_img_ratio = sum(s.image_area_ratio for s in profile.per_page_signals) / max(
+                len(profile.per_page_signals), 1
+            )
+
+        # Thresholds and limits for when layout-aware extraction is appropriate.
+        # For documents like the Tax Expenditure report (almost no images, clean grids),
+        # Fast Text is sufficient and more robust than Docling.
+        table_heavy_min_img = float(
+            self.doc_thresholds.get("layout_for_table_heavy_min_image_ratio", 0.05)
+        )
+        max_pages_for_layout = int(self.doc_thresholds.get("max_pages_for_layout", 120))
+        layout_max_avg_img = float(
+            self.doc_thresholds.get("layout_max_avg_image_ratio", 0.85)
+        )
+
+        # Hard gate: avoid Docling on very long documents to reduce memory pressure.
+        if profile.page_count > max_pages_for_layout:
+            # For very long, image-heavy docs, let Vision handle complex pages.
+            if avg_img_ratio >= layout_max_avg_img or profile.origin_type == OriginType.MIXED:
+                return "vision"
+            # Otherwise, rely on Fast Text + confidence-based escalation later.
+
+        # 2. Layout Complexity escalation (Table Heavy / Multi Column / Mixed),
+        # with a guard that skips Layout for "simple" table-heavy documents.
+        if profile.origin_type == OriginType.MIXED or profile.layout_complexity in (
+            LayoutComplexity.MULTI_COLUMN,
+            LayoutComplexity.MIXED,
+        ):
             return "layout"
+
+        if profile.layout_complexity == LayoutComplexity.TABLE_HEAVY:
+            # Only use Layout when images / complex visuals suggest we need it.
+            if avg_img_ratio >= table_heavy_min_img:
+                return "layout"
+            # Otherwise fall through to confidence-based / fast_text selection.
 
         # 3. Confidence-based triage
         if profile.avg_confidence < 0.70:
@@ -168,7 +207,53 @@ class ExtractionRouter:
         )
 
         start = time.time()
-        result = strategy.extract(pdf_path, profile)
+        try:
+            result = strategy.extract(pdf_path, profile)
+        except Exception as e:
+            # Graceful degradation: if a higher-cost strategy fails (e.g. Docling OOM),
+            # escalate towards Vision first (Strategy C) where appropriate, and only
+            # then fall back to Fast Text as a last resort, marking the document for review.
+            logger.exception(
+                f"Strategy '{strategy_name}' failed with error: {e}. "
+                "Attempting graceful fallback following A → B → C escalation pattern."
+            )
+
+            if strategy_name == "layout":
+                # Prefer escalating to Vision (Strategy C) — aligns with the
+                # spec's multi-tier design when layout-aware parsing fails.
+                try:
+                    vision = self.strategies["vision"]
+                    logger.warning(
+                        "Falling back from Strategy B (layout) to Strategy C (vision) "
+                        "due to layout engine failure."
+                    )
+                    result = vision.extract(pdf_path, profile)
+                    result.strategy_used = "vision"
+                    # Vision output is generally high quality; review flag only if needed later.
+                except Exception as vision_err:
+                    logger.exception(
+                        f"Vision fallback after layout failure also failed: {vision_err}. "
+                        "Falling back to Fast Text (Strategy A) and flagging for review."
+                    )
+                    fast = self.strategies["fast_text"]
+                    result = fast.extract(pdf_path, profile)
+                    result.strategy_used = "fast_text"
+                    result.needs_review = True
+            else:
+                # For other failures (e.g. vision), emit a minimal placeholder document
+                logger.error(
+                    f"Strategy '{strategy_name}' could not be recovered. "
+                    "Marking document as needs_review."
+                )
+                result = ExtractedDocument(
+                    doc_id=profile.doc_id,
+                    filename=profile.filename,
+                    pages=[],
+                    strategy_used=strategy_name,
+                    confidence_score=0.0,
+                    needs_review=True,
+                )
+
         elapsed = time.time() - start
 
         result.processing_time_s = round(elapsed, 2)
