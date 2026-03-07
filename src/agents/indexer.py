@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections import defaultdict
 from pathlib import Path
 
@@ -95,6 +96,9 @@ class PageIndexBuilder:
             # 1. Summarize section via LLM
             # Cap text at 3000 chars to avoid overloading the local context window for a simple summary
             summary = self.llm.generate_summary(section_text[:3000])
+
+            # 1b. Lightweight key entity extraction for PageIndexNode.key_entities
+            key_entities = self._extract_key_entities(section_text[:2000])
             
             # 2. Extract Key-Value Facts (if rules match)
             if run_fact_extraction and "tables" in data_types:
@@ -121,7 +125,7 @@ class PageIndexBuilder:
                 page_end=sec_max_p,
                 summary=summary,
                 data_types_present=list(data_types),
-                key_entities=[]  # Could be added with an NER step
+                key_entities=key_entities,
             )
             root_node.child_sections.append(child_node)
 
@@ -139,3 +143,105 @@ class PageIndexBuilder:
             json.dump(node.model_dump(mode="json"), f, indent=2)
             
         logger.info(f"Saved PageIndex to {out_path}")
+
+    # ─────────────────────────────────────────────────────────────
+    # Key entity extraction & topical traversal
+    # ─────────────────────────────────────────────────────────────
+
+    def _extract_key_entities(self, text: str, max_entities: int = 8) -> list[str]:
+        """
+        Lightweight NER-style extraction for PageIndexNode.key_entities.
+
+        Heuristic:
+          - Find sequences of capitalised words (e.g., 'Ministry of Finance', 'Commercial Bank').
+          - Deduplicate and return the first N distinct entities.
+        """
+        if not text:
+            return []
+
+        # Regex for capitalised word sequences, allowing 'of', 'and', '&' inside.
+        pattern = r"\b([A-Z][a-zA-Z]+(?:\s+(?:of|and|&)\s+[A-Z][a-zA-Z]+)*)\b"
+        matches = re.findall(pattern, text)
+
+        seen = set()
+        entities: list[str] = []
+        for m in matches:
+            cleaned = m.strip()
+            if cleaned and cleaned not in seen:
+                seen.add(cleaned)
+                entities.append(cleaned)
+            if len(entities) >= max_entities:
+                break
+
+        return entities
+
+    def rank_sections(
+        self,
+        doc_id: str,
+        topic: str,
+        top_k: int = 3,
+    ) -> list[dict]:
+        """
+        Rank PageIndex sections for a document by relevance to a topic string.
+
+        Simple keyword-based scoring:
+          - Normalise topic tokens to lowercase words.
+          - Score each section by overlap with tokens in (title + summary).
+          - Return the top-k sections with their scores and metadata.
+        """
+        idx_path = self.out_dir / f"{doc_id}_index.json"
+        if not idx_path.exists():
+            raise FileNotFoundError(f"No PageIndex found for doc_id={doc_id}")
+
+        with open(idx_path, "r", encoding="utf-8") as f:
+            tree = json.load(f)
+
+        sections = self._flatten_sections(tree)
+
+        topic_tokens = {
+            t for t in re.findall(r"\w+", topic.lower()) if len(t) > 2
+        }
+        if not topic_tokens:
+            return []
+
+        scored: list[tuple[float, dict]] = []
+        for sec in sections:
+            text = f"{sec.get('title', '')}\n{sec.get('summary', '')}".lower()
+            if not text.strip():
+                continue
+
+            sec_tokens = set(re.findall(r"\w+", text))
+            overlap = topic_tokens & sec_tokens
+            score = float(len(overlap))
+            if score > 0:
+                scored.append(
+                    (
+                        score,
+                        {
+                            "title": sec.get("title", ""),
+                            "page_start": sec.get("page_start", 0),
+                            "page_end": sec.get("page_end", 0),
+                            "summary": sec.get("summary", ""),
+                            "key_entities": sec.get("key_entities", []),
+                            "score": score,
+                        },
+                    )
+                )
+
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [meta for _, meta in scored[:top_k]]
+
+    def _flatten_sections(self, tree: dict) -> list[dict]:
+        """
+        Flatten the PageIndex tree into a simple list of section dicts,
+        excluding the root node.
+        """
+        result: list[dict] = []
+
+        def _walk(node: dict) -> None:
+            for child in node.get("child_sections", []):
+                result.append(child)
+                _walk(child)
+
+        _walk(tree)
+        return result
