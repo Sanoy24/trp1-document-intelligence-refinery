@@ -62,15 +62,15 @@ class LayoutExtractor(ExtractionStrategy):
             # Determine a safe number of threads to use (leave 1 core free)
             num_threads = max(1, (os.cpu_count() or 4) - 1)
 
-            # Define pipeline options — Optimized for speed and low memory
+            # Define pipeline options — tuned for stability on constrained machines
             pipeline_options = ThreadedPdfPipelineOptions(
                 do_ocr=False,
                 generate_page_images=False,
-                do_table_structure=True,  # Always enable for Strategy B
+                do_table_structure=True,  # keep table structure for complex layouts
                 ocr_batch_size=1,
-                layout_batch_size=4,
-                table_batch_size=4,
-                queue_max_size=10,
+                layout_batch_size=2,
+                table_batch_size=2,
+                queue_max_size=5,
                 accelerator_options=AcceleratorOptions(
                     num_threads=num_threads, device="cpu"
                 ),
